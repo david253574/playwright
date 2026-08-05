@@ -30,7 +30,7 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
         try:
             context = p.chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
-                executable_path="/usr/bin/google-chrome-stable",
+                
                 headless=False,
                 args=[
                     "--disable-blink-features=AutomationControlled",
