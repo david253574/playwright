@@ -1,0 +1,28 @@
+__pycache__/
+venv/
+.env
+*.log
+*.png
+*.json
+user_data/
+chrome_profile/
+chrome_debug_profile/
+temp_uploads/
+scheduled_uploads/
+communities_cache.json
+profiles.json
+scheduled_queue.json
+daily_post_history.json
+community_cycle_history.json
+auto_responder_config.json
+.DS_Store
+
+# Scratch and test scripts
+test_*.py
+debug_*.py
+fix_*.py
+
+# Cached DOM and text outputs
+dom_buttons.txt
+dom_textboxes.txt
+community_buttons.txt

@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: playwright-streamlit-app
+    env: python
+    buildCommand: pip install -r requirements.txt && playwright install chromium --with-deps
+    startCommand: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" streamlit run app.py --server.port $PORT --server.address 0.0.0.0
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.13
+
+  - type: worker
+    name: playwright-background-worker
+    env: python
+    buildCommand: pip install -r requirements.txt && playwright install chromium --with-deps
+    startCommand: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python background_worker.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.13
