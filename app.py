@@ -51,7 +51,7 @@ def setup_persistent_session(user_data_path, target_login_url="https://x.com"):
         try:
             context = p.chromium.launch_persistent_context(
                 user_data_dir=user_data_path,
-                
+                executable_path="/usr/bin/google-chrome-stable",
                 headless=False,
                 args=[
                     "--disable-blink-features=AutomationControlled",
@@ -134,7 +134,7 @@ def fetch_joined_communities(profile):
         try:
             context = p.chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
-                
+                executable_path="/usr/bin/google-chrome-stable",
                 headless=False,
                 args=["--disable-blink-features=AutomationControlled", "--disable-infobars"],
                 ignore_default_args=["--enable-automation"]
@@ -241,7 +241,7 @@ def fetch_joined_communities_manual(profile):
         try:
             context = p.chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
-                
+                executable_path="/usr/bin/google-chrome-stable",
                 headless=False,
                 args=[
                     "--disable-blink-features=AutomationControlled",
@@ -372,7 +372,7 @@ def process_profile(profile, user_tweet_text, uploaded_media_path=None, selected
         try:
             context = p.chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
-                
+                executable_path="/usr/bin/google-chrome-stable",
                 headless=False,
                 args=[
                     "--disable-blink-features=AutomationControlled",
@@ -520,14 +520,23 @@ def process_profile(profile, user_tweet_text, uploaded_media_path=None, selected
                         except Exception:
                             st.warning(f"[{profile['id']}] Toast not found, finding our post in the feed...")
                             try:
+                                page.wait_for_timeout(2000)
                                 profile_href = page.locator('a[data-testid="AppTabBar_Profile_Link"]').get_attribute('href')
                                 if profile_href:
                                     first_tweet = page.locator(f'article[data-testid="tweet"] a[dir="auto"][href^="{profile_href}/status/"]').first
                                     if first_tweet.count() == 0:
                                         first_tweet = page.locator(f'article[data-testid="tweet"] a[href*="{profile_href}/status/"]').first
+                                    if first_tweet.count() == 0:
+                                        st.warning(f"[{profile['id']}] Not found in feed, refreshing page...")
+                                        page.reload(wait_until="domcontentloaded")
+                                        page.wait_for_timeout(4000)
+                                        first_tweet = page.locator(f'article[data-testid="tweet"] a[dir="auto"][href^="{profile_href}/status/"]').first
+                                        if first_tweet.count() == 0:
+                                            first_tweet = page.locator(f'article[data-testid="tweet"] a[href*="{profile_href}/status/"]').first
                                     first_tweet.click(force=True)
                             except Exception as inner_e:
                                 st.error(f"[{profile['id']}] Could not locate our post in feed: {inner_e}")
+                                raise Exception("Aborting comment: could not navigate to post status page.")
                         time.sleep(random.uniform(2.0, 4.0))
                         
                         reply_selectors = [
@@ -588,7 +597,7 @@ def process_auto_responder(profile, universal_msg, check_priority=True, check_hi
         try:
             context = p.chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
-                
+                executable_path="/usr/bin/google-chrome-stable",
                 headless=False,
                 args=[
                     "--disable-blink-features=AutomationControlled",
@@ -705,14 +714,13 @@ def process_auto_responder(profile, universal_msg, check_priority=True, check_hi
             
             
             for tab_name in tabs_to_check:
-                if processed_unified_list:
-                    st.info("Already processed unified list. Skipping remaining tabs.")
-                    break
-                    
                 st.info(f"[{profile['id']}] Processing '{tab_name}' tab...")
                 try:
                     # Give X more time to render the UI, targeting only visible elements
-                    tab_locator = page.locator(f"[role='tab']:has-text('{tab_name}'), a:has-text('{tab_name}'), span:text-is('{tab_name}')").first
+                    selector = f"[role='tab']:has-text('{tab_name}'), a:has-text('{tab_name}'), span:text-is('{tab_name}')"
+                    if tab_name == "Hidden":
+                        selector += ", button[data-testid='dm-message-requests-other-button'], [role='tab']:has-text('Other'), a:has-text('Other'), span:text-is('Other')"
+                    tab_locator = page.locator(selector).first
                     
                     tab_found = False
                     try:
@@ -732,11 +740,11 @@ def process_auto_responder(profile, universal_msg, check_priority=True, check_hi
                     # X uses data-testid="conversation" for each chat in the list
                     while True:
                         try:
-                            # Wait up to 3 seconds for conversations OR the empty state to load
-                            page.wait_for_selector('[data-testid^="dm-conversation-item-"], [data-testid="conversation"], [data-testid="dm-message-requests-empty"]', timeout=3000)
+                            # Wait up to 10 seconds for conversations OR the empty state to load
+                            page.wait_for_selector('[data-testid^="dm-conversation-item-"], [data-testid^="dm-message-request-item-"], [data-testid="conversation"], [data-testid="dm-message-requests-empty"]', timeout=10000)
                         except: pass
                         
-                        convos = page.locator('[data-testid^="dm-conversation-item-"], [data-testid="conversation"]')
+                        convos = page.locator('[data-testid^="dm-conversation-item-"], [data-testid^="dm-message-request-item-"], [data-testid="conversation"]')
                         if convos.count() == 0:
                             st.info(f"[{profile['id']}] No more pending conversations found in {tab_name}.")
                             break
@@ -900,8 +908,11 @@ def process_auto_responder(profile, universal_msg, check_priority=True, check_hi
                         
                         # Click the tab again to continue
                         try:
-                            tab_locator = page.locator(f"[role='tab']:has-text('{tab_name}'), a:has-text('{tab_name}'), span:text-is('{tab_name}')").first
-                            tab_locator.wait_for(state="visible", timeout=10000)
+                            selector = f"[role='tab']:has-text('{tab_name}'), a:has-text('{tab_name}'), span:text-is('{tab_name}')"
+                            if tab_name == "Hidden":
+                                selector += ", button[data-testid='dm-message-requests-other-button'], [role='tab']:has-text('Other'), a:has-text('Other'), span:text-is('Other')"
+                            tab_locator = page.locator(selector).first
+                            tab_locator.wait_for(state="visible", timeout=5000)
                             tab_locator.click()
                             human_pause(2.0, 4.0)
                         except Exception:
@@ -912,10 +923,6 @@ def process_auto_responder(profile, universal_msg, check_priority=True, check_hi
                             
                 except Exception as e:
                     st.warning(f"Finished or encountered issue in {tab_name} tab: {e}")
-                
-                if not tab_found:
-                    st.info("Your account does not appear to use tabs. Stopping further tab checks to avoid duplicate replies.")
-                    break
                     
         except Exception as e:
             st.error(f"Browser launch failed: {e}")
@@ -1473,7 +1480,7 @@ with tab2:
 # TAB 3: AUTO-RESPONDER
 with tab3:
     st.header("💬 Automated Message Responder")
-    st.write("Automatically reply to messages in your **Priority** and **Hidden** message tabs on X.")
+    st.write("Automatically reply to messages in your **Priority** and **Other (Hidden)** message tabs on X.")
     
     if not profiles_data:
         st.info("Configure a user record target inside the 'Manage Accounts' tab first.")
@@ -1491,13 +1498,13 @@ with tab3:
         with col_chk1:
             process_priority = st.checkbox("Check 'Priority' tab", value=True)
         with col_chk2:
-            process_hidden = st.checkbox("Check 'Hidden' tab", value=True)
+            process_hidden = st.checkbox("Check 'Other' (Hidden) tab", value=True)
             
         skip_older_than_hours = st.number_input("Skip messages older than (hours)", min_value=0.0, value=2.0, step=0.5, help="Messages older than this will be skipped automatically. Set to 0 to process all.")
         
         if st.button("Start Auto-Responder Sequence", type="primary", use_container_width=True):
             if not process_priority and not process_hidden:
-                st.warning("Please select at least one tab to check (Priority or Hidden).")
+                st.warning("Please select at least one tab to check (Priority or Other).")
             else:
                 profiles_to_run = profiles_data if run_all else [profile_options[selected_responder_id]]
                 
@@ -1526,7 +1533,7 @@ with tab3:
             
         if st.button("Schedule in Background", type="secondary", use_container_width=True):
             if not process_priority and not process_hidden:
-                st.warning("Please select at least one tab to check (Priority or Hidden).")
+                st.warning("Please select at least one tab to check (Priority or Other).")
             else:
                 config = {
                     "interval_minutes": check_interval,

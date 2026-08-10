@@ -110,7 +110,7 @@ def process_profile(profile, user_tweet_text, uploaded_media_path=None, selected
         try:
             context = p.chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
-                
+                executable_path="/usr/bin/google-chrome-stable",
                 headless=False,
                 args=[
                     "--disable-blink-features=AutomationControlled",
@@ -257,14 +257,23 @@ def process_profile(profile, user_tweet_text, uploaded_media_path=None, selected
                         except Exception:
                             log(f"[{profile['id']}] Toast not found, finding our post in the feed...")
                             try:
+                                page.wait_for_timeout(2000)
                                 profile_href = page.locator('a[data-testid="AppTabBar_Profile_Link"]').get_attribute('href')
                                 if profile_href:
                                     first_tweet = page.locator(f'article[data-testid="tweet"] a[dir="auto"][href^="{profile_href}/status/"]').first
                                     if first_tweet.count() == 0:
                                         first_tweet = page.locator(f'article[data-testid="tweet"] a[href*="{profile_href}/status/"]').first
+                                    if first_tweet.count() == 0:
+                                        log(f"[{profile['id']}] Not found in feed, refreshing page...")
+                                        page.reload(wait_until="domcontentloaded")
+                                        page.wait_for_timeout(4000)
+                                        first_tweet = page.locator(f'article[data-testid="tweet"] a[dir="auto"][href^="{profile_href}/status/"]').first
+                                        if first_tweet.count() == 0:
+                                            first_tweet = page.locator(f'article[data-testid="tweet"] a[href*="{profile_href}/status/"]').first
                                     first_tweet.click(force=True)
                             except Exception as inner_e:
                                 log(f"[{profile['id']}] Could not locate our post in feed: {inner_e}")
+                                raise Exception("Aborting comment: could not navigate to post status page.")
                         time.sleep(random.uniform(2.0, 4.0))
                         
                         reply_selectors = [
@@ -407,8 +416,8 @@ def run_worker():
                         
                         log(f"Queueing {len(unique_keys)} accounts in {len(chunks)} chunks of 10...")
                         
-                        # Run 2 chunks simultaneously
-                        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                        # Run 3 chunks simultaneously
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
                             executor.map(process_chunk, chunks)
                                 
                     

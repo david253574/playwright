@@ -2,6 +2,7 @@ import os
 import time
 import json
 import random
+import re
 from datetime import datetime, timezone, timedelta
 from playwright.sync_api import sync_playwright
 
@@ -30,7 +31,7 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
         try:
             context = p.chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
-                
+                executable_path="/usr/bin/google-chrome-stable",
                 headless=False,
                 args=[
                     "--disable-blink-features=AutomationControlled",
@@ -82,10 +83,10 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
             accepted_users_whitelist = set()
             try:
                 # Wait up to 5 seconds for conversations to appear
-                page.wait_for_selector('[data-testid^="dm-conversation-item-"], [data-testid="conversation"]', timeout=5000)
+                page.wait_for_selector('[data-testid^="dm-conversation-item-"], [data-testid^="dm-message-request-item-"], [data-testid="conversation"]', timeout=5000)
                 # Scrape while scrolling to catch virtualized DOM elements
                 for _ in range(12):
-                    main_convos = page.locator('[data-testid^="dm-conversation-item-"], [data-testid="conversation"]')
+                    main_convos = page.locator('[data-testid^="dm-conversation-item-"], [data-testid^="dm-message-request-item-"], [data-testid="conversation"]')
                     for i in range(main_convos.count()):
                         try:
                             name = main_convos.nth(i).inner_text().split('\n')[0].strip()
@@ -142,12 +143,12 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
             processed_unified_list = False
             
             for tab_name in tabs_to_check:
-                if processed_unified_list:
-                    break
-                    
                 log(f"[{profile['id']}] Processing '{tab_name}' tab...")
                 try:
-                    tab_locator = page.locator(f"[role='tab']:has-text('{tab_name}'), a:has-text('{tab_name}'), span:text-is('{tab_name}')").first
+                    selector = f"[role='tab']:has-text('{tab_name}'), a:has-text('{tab_name}'), span:text-is('{tab_name}')"
+                    if tab_name == "Hidden":
+                        selector += ", button[data-testid='dm-message-requests-other-button'], [role='tab']:has-text('Other'), a:has-text('Other'), span:text-is('Other')"
+                    tab_locator = page.locator(selector).first
                     try:
                         tab_locator.wait_for(state="visible", timeout=10000)
                         tab_locator.click()
@@ -165,10 +166,10 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
                     
                     while True:
                         try:
-                            page.wait_for_selector('[data-testid^="dm-conversation-item-"], [data-testid="conversation"], [data-testid="dm-message-requests-empty"]', timeout=3000)
+                            page.wait_for_selector('[data-testid^="dm-conversation-item-"], [data-testid^="dm-message-request-item-"], [data-testid="conversation"], [data-testid="dm-message-requests-empty"]', timeout=10000)
                         except: pass
                         
-                        convos = page.locator('[data-testid^="dm-conversation-item-"], [data-testid="conversation"]')
+                        convos = page.locator('[data-testid^="dm-conversation-item-"], [data-testid^="dm-message-request-item-"], [data-testid="conversation"]')
                         if convos.count() == 0:
                             log(f"[{profile['id']}] No more pending conversations found in {tab_name}.")
                             break
@@ -209,6 +210,22 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
                                         log(f"Message from {current_convo_name} is older than {skip_older_than_hours} hours. Skipping.")
                                         processed_users.add(current_convo_name)
                                         continue
+                            elif skip_older_than_hours > 0:
+                                # Fallback: parse time from aria-description or inner text
+                                aria_desc = convo.get_attribute("aria-description") or ""
+                                text_to_check = aria_desc.lower()
+                                
+                                # Quick heuristic for relative times like "10h", "1d", "Jan 1"
+                                # If it contains "d" (days) or a month name, it's likely older than most hour limits
+                                is_old = False
+                                if skip_older_than_hours < 24:
+                                    if re.search(r'\b\d+d\b', text_to_check): is_old = True
+                                    if any(m in text_to_check for m in ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']): is_old = True
+                                    
+                                if is_old:
+                                    log(f"Message from {current_convo_name} seems older than {skip_older_than_hours} hours (based on text). Skipping.")
+                                    processed_users.add(current_convo_name)
+                                    continue
                                         
                             convo_text = convo.inner_text().lower()
                             if "you accepted the request" in convo_text or "you sent" in convo_text or "you:" in convo_text:
@@ -226,7 +243,7 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
                             human_pause(1.0, 2.0)
                         except: pass
                         
-                        needs_reply = False
+                        needs_reply = True # Default to True, if we got here we should reply
                         try:
                             first_words = " ".join(final_reply.split()[:3])
                             if page.get_by_text(first_words).count() > 0:
@@ -235,11 +252,10 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
                         except: pass
                             
                         try:
-                            accept_btn = page.get_by_role("button", name="Accept", exact=True).last
-                            accept_btn.wait_for(state="visible", timeout=3000)
-                            accept_btn.click()
-                            human_pause(1.5, 3.0)
-                            needs_reply = True
+                            accept_btn = page.locator('button:has-text("Accept"), button:has-text("accept"), [role="button"]:has-text("Accept"), [data-testid*="accept" i], [aria-label*="accept" i]').last
+                            if accept_btn.is_visible(timeout=4000):
+                                accept_btn.click()
+                                human_pause(1.5, 3.0)
                         except: pass
                             
                         if not needs_reply:
@@ -291,8 +307,11 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
                         human_pause(2.0, 4.0)
                         
                         try:
-                            tab_locator = page.locator(f"[role='tab']:has-text('{tab_name}'), a:has-text('{tab_name}'), span:text-is('{tab_name}')").first
-                            tab_locator.wait_for(state="visible", timeout=10000)
+                            selector = f"[role='tab']:has-text('{tab_name}'), a:has-text('{tab_name}'), span:text-is('{tab_name}')"
+                            if tab_name == "Hidden":
+                                selector += ", button[data-testid='dm-message-requests-other-button'], [role='tab']:has-text('Other'), a:has-text('Other'), span:text-is('Other')"
+                            tab_locator = page.locator(selector).first
+                            tab_locator.wait_for(state="visible", timeout=5000)
                             tab_locator.click()
                             human_pause(2.0, 4.0)
                         except Exception:
@@ -349,10 +368,12 @@ def check_auto_responder():
     sel_prof = cfg.get("selected_profile")
     profiles_to_run = profiles if run_all else [p for p in profiles if p["id"] == sel_prof]
     
+    import concurrent.futures
     failed = False
-    for prof in profiles_to_run:
+    
+    def process_one(prof):
         try:
-            status = process_auto_responder_bg(
+            return process_auto_responder_bg(
                 prof, 
                 cfg.get("universal_msg", ""), 
                 cfg.get("check_priority", True), 
@@ -360,11 +381,14 @@ def check_auto_responder():
                 cfg.get("unlock_password", ""),
                 cfg.get("skip_older_than_hours", 2.0)
             )
-            if status == "FAILED_TO_SEND":
-                failed = True
-                break
         except Exception as e:
             log(f"Unhandled exception in process_auto_responder_bg for {prof.get('id')}: {e}")
+            return None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        results = list(executor.map(process_one, profiles_to_run))
+        if "FAILED_TO_SEND" in results:
+            failed = True
         
     # Re-read the config to avoid overwriting UI changes (like 'Stop') made while we were processing
     try:
