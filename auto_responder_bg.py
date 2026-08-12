@@ -89,7 +89,11 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
                     main_convos = page.locator('[data-testid^="dm-conversation-item-"], [data-testid^="dm-message-request-item-"], [data-testid="conversation"]')
                     for i in range(main_convos.count()):
                         try:
-                            name = main_convos.nth(i).inner_text().split('\n')[0].strip()
+                            tid = main_convos.nth(i).get_attribute("data-testid")
+                            if tid:
+                                name = tid.replace("dm-conversation-item-", "").replace("dm-message-request-item-", "")
+                            else:
+                                name = main_convos.nth(i).inner_text().split('\n')[0].strip()
                             accepted_users_whitelist.add(name)
                         except: pass
                     page.keyboard.press("PageDown")
@@ -178,7 +182,11 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
                         current_convo_name = None
                         for i in range(convos.count()):
                             try:
-                                name = convos.nth(i).inner_text().split('\n')[0].strip()
+                                tid = convos.nth(i).get_attribute("data-testid")
+                                if tid:
+                                    name = tid.replace("dm-conversation-item-", "").replace("dm-message-request-item-", "")
+                                else:
+                                    name = convos.nth(i).inner_text().split('\n')[0].strip()
                             except:
                                 name = f"unknown_{i}"
                             
@@ -193,7 +201,26 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
                                 break
                                 
                         if unprocessed_index == -1:
-                            break
+                            last_item_id = ""
+                            try:
+                                if convos.count() > 0:
+                                    last_item_id = convos.last.get_attribute("data-testid") or convos.last.inner_text()
+                            except: pass
+                            
+                            page.keyboard.press("PageDown")
+                            human_pause(1.5, 3.0)
+                            
+                            new_convos = page.locator('[data-testid^="dm-conversation-item-"], [data-testid^="dm-message-request-item-"], [data-testid="conversation"]')
+                            new_last_item_id = ""
+                            try:
+                                if new_convos.count() > 0:
+                                    new_last_item_id = new_convos.last.get_attribute("data-testid") or new_convos.last.inner_text()
+                            except: pass
+                            
+                            if last_item_id == new_last_item_id:
+                                break
+                            else:
+                                continue
                             
                         convo = convos.nth(unprocessed_index)
                         
@@ -210,25 +237,25 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
                                         log(f"Message from {current_convo_name} is older than {skip_older_than_hours} hours. Skipping.")
                                         processed_users.add(current_convo_name)
                                         continue
-                            elif skip_older_than_hours > 0:
+                            convo_text = convo.inner_text().lower()
+                            if skip_older_than_hours > 0 and (not time_el.count() or not time_el.first.get_attribute('datetime')):
                                 # Fallback: parse time from aria-description or inner text
                                 aria_desc = convo.get_attribute("aria-description") or ""
-                                text_to_check = aria_desc.lower()
+                                text_to_check = aria_desc.lower() + " " + convo_text
                                 
                                 # Quick heuristic for relative times like "10h", "1d", "Jan 1"
                                 # If it contains "d" (days) or a month name, it's likely older than most hour limits
                                 is_old = False
                                 if skip_older_than_hours < 24:
                                     if re.search(r'\b\d+d\b', text_to_check): is_old = True
-                                    if any(m in text_to_check for m in ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']): is_old = True
+                                    if re.search(r'\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{1,2}\b', text_to_check): is_old = True
                                     
                                 if is_old:
                                     log(f"Message from {current_convo_name} seems older than {skip_older_than_hours} hours (based on text). Skipping.")
                                     processed_users.add(current_convo_name)
                                     continue
                                         
-                            convo_text = convo.inner_text().lower()
-                            if "you accepted the request" in convo_text or "you sent" in convo_text or "you:" in convo_text:
+                            if "you accepted the request" in convo_text or "\nyou:" in "\n" + convo_text:
                                 processed_users.add(current_convo_name)
                                 continue
                         except Exception as e:
@@ -245,10 +272,10 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
                         
                         needs_reply = True # Default to True, if we got here we should reply
                         try:
-                            first_words = " ".join(final_reply.split()[:3])
-                            if page.get_by_text(first_words).count() > 0:
-                                processed_users.add(current_convo_name)
-                                continue
+                            if final_reply and final_reply.strip():
+                                first_words = " ".join(final_reply.split()[:3])
+                                if first_words and page.get_by_text(first_words).count() > 0:
+                                    needs_reply = False
                         except: pass
                             
                         try:
@@ -258,49 +285,48 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
                                 human_pause(1.5, 3.0)
                         except: pass
                             
-                        if not needs_reply:
-                            processed_users.add(current_convo_name)
-                            continue 
-                            
-                        log(f"[{profile['id']}] Replying to {current_convo_name}...")
-                        try:
-                            human_pause(1.5, 3.0)
-                            all_textboxes = page.locator('div[role="textbox"], textarea')
-                            visible_boxes = []
-                            for i in range(all_textboxes.count()):
-                                box = all_textboxes.nth(i)
-                                if box.is_visible():
-                                    visible_boxes.append(box)
-                            
-                            if visible_boxes:
-                                editor = visible_boxes[-1]
-                                editor.click(timeout=3000)
-                                human_pause(0.5, 1.5)
-                                editor.fill(final_reply)
-                                human_pause(0.5, 1.0)
-                                editor.press("Space")
-                                editor.press("Backspace")
+                        if needs_reply:
+                            log(f"[{profile['id']}] Replying to {current_convo_name}...")
+                            try:
                                 human_pause(1.5, 3.0)
+                                all_textboxes = page.locator('div[role="textbox"], textarea')
+                                visible_boxes = []
+                                for i in range(all_textboxes.count()):
+                                    box = all_textboxes.nth(i)
+                                    if box.is_visible():
+                                        visible_boxes.append(box)
                                 
-                                try:
-                                    send_btn = page.locator('div[data-testid="dmComposerSendButton"], button[aria-label="Send"], div[aria-label="Send"]').last
-                                    send_btn.wait_for(state="visible", timeout=3000)
-                                    send_btn.click(timeout=3000)
-                                except:
-                                    editor.press("Enter")
-                                
-                                # CRITICAL: Wait long enough for the network request to finish!
-                                # If we navigate away too quickly, the browser aborts the API call.
-                                human_pause(4.0, 6.0)
-                                
-                                try:
-                                    if page.get_by_text("Failed to send", ignore_case=True).is_visible(timeout=1000) or \
-                                       page.get_by_text("Not sent", ignore_case=True).is_visible(timeout=1000):
-                                        log(f"[{profile['id']}] Detected 'Failed to send' message! Rate limit or block likely.")
-                                        return "FAILED_TO_SEND"
-                                except: pass
-                        except Exception as e:
-                            log(f"Error replying to {current_convo_name}: {e}")
+                                if visible_boxes:
+                                    editor = visible_boxes[-1]
+                                    editor.click(timeout=3000)
+                                    human_pause(0.5, 1.5)
+                                    editor.fill(final_reply)
+                                    human_pause(0.5, 1.0)
+                                    editor.press("Space")
+                                    editor.press("Backspace")
+                                    human_pause(1.5, 3.0)
+                                    
+                                    try:
+                                        send_btn = page.locator('div[data-testid="dmComposerSendButton"], button[aria-label="Send"], div[aria-label="Send"]').last
+                                        send_btn.wait_for(state="visible", timeout=3000)
+                                        send_btn.click(timeout=3000)
+                                    except:
+                                        editor.press("Enter")
+                                    
+                                    # CRITICAL: Wait long enough for the network request to finish!
+                                    # If we navigate away too quickly, the browser aborts the API call.
+                                    human_pause(4.0, 6.0)
+                                    
+                                    try:
+                                        if page.get_by_text("Failed to send", ignore_case=True).is_visible(timeout=1000) or \
+                                           page.get_by_text("Not sent", ignore_case=True).is_visible(timeout=1000):
+                                            log(f"[{profile['id']}] Detected 'Failed to send' message! Rate limit or block likely.")
+                                            return "FAILED_TO_SEND"
+                                    except: pass
+                            except Exception as e:
+                                log(f"Error replying to {current_convo_name}: {e}")
+                        else:
+                            log(f"[{profile['id']}] Already replied to {current_convo_name}. Skipping.")
                         
                         processed_users.add(current_convo_name)
                         page.goto("https://x.com/messages/requests", wait_until="commit")

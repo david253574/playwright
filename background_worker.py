@@ -433,6 +433,18 @@ def run_worker():
                             json.dump(final_remaining, f, indent=4)
                     except Exception as err:
                         log(f"Error updating queue: {err}")
+                        
+                    # Clean up scheduled images that have been processed
+                    for job_id in executed_job_ids:
+                        job = next((j for j in queue if j["id"] == job_id), None)
+                        if job and "uploaded_images" in job:
+                            for img_path in job["uploaded_images"].values():
+                                if img_path and os.path.exists(img_path):
+                                    try:
+                                        os.remove(img_path)
+                                        log(f"Cleaned up scheduled image: {img_path}")
+                                    except Exception as err:
+                                        log(f"Error removing {img_path}: {err}")
         except Exception as e:
             log(f"Worker iteration error: {e}")
             
