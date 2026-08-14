@@ -3,6 +3,7 @@ import json
 import os
 import random
 import time
+import subprocess
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 from playwright_stealth import Stealth
 
@@ -43,47 +44,27 @@ def is_session_locked(user_data_dir):
 
 def setup_persistent_session(user_data_path, target_login_url="https://x.com"):
     """Launches a visible browser for initial login and waits for the user to close it."""
-    with sync_playwright() as p:
-        context = None
-        if is_session_locked(user_data_path):
-            return False, "Browser in use."
-            
-        try:
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=user_data_path,
-                executable_path="/usr/bin/google-chrome-stable",
-                headless=False,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-infobars",
-                    "--disable-features=Translate",
-                    "--disable-sync"
-                ],
-                viewport={"width": random.choice([1366, 1440, 1920, 1536]), "height": random.choice([768, 900, 1080, 864])},
-                ignore_default_args=["--enable-automation"]
-            )
-            page = context.new_page()
-            Stealth().apply_stealth_sync(page)
-            # --- FIX: Relax the strict loading rules for the initial login ---
-            try:
-                page.goto(target_login_url, wait_until="domcontentloaded", timeout=60000)
-            except PlaywrightTimeoutError:
-                # Ignore the timeout if background trackers take too long. The page is visible.
-                pass
-            
-            # Script pauses here until the user physically closes the browser tab/window
-            page.wait_for_event("close", timeout=0)
-            return True, "Session saved successfully!"
-        except Exception as e:
-            st.error("The browser could not be opened. Please verify that the browser is not already running.")
-            return False, f"Setup failed: {str(e)}"
-        finally:
-            if context:
-                try:
-                    time.sleep(random.uniform(4.0, 6.5))
-                    context.close()
-                except:
-                    pass
+    if is_session_locked(user_data_path):
+        return False, "Browser in use."
+        
+    try:
+        # Launch real Chrome without Playwright so Google/Twitter don't block 2FA phone prompts
+        process = subprocess.Popen([
+            "/usr/bin/google-chrome-stable",
+            f"--user-data-dir={user_data_path}",
+            "--disable-sync",
+            "--no-first-run",
+            "--new-window",
+            target_login_url
+        ])
+        
+        # Wait for the user to close the browser
+        process.wait()
+        
+        return True, "Session saved successfully!"
+    except Exception as e:
+        st.error("The browser could not be opened. Please verify that the browser is not already running.")
+        return False, f"Setup failed: {str(e)}"
 
 def can_post_to_community(p_id, comm_url, max_daily_posts):
     if max_daily_posts <= 0: return True
