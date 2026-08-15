@@ -319,8 +319,31 @@ def process_profile(profile, user_tweet_text, uploaded_media_path=None, selected
 
 def run_worker():
     log("Started background worker...")
+    last_cleanup_time = time.time()
     while True:
         try:
+            import shutil
+            if time.time() - last_cleanup_time > 86400: # 24 hours
+                try:
+                    with open("worker.log", "w") as f:
+                        pass
+                    log("Performed daily worker.log cleanup.")
+                    
+                    if os.path.exists("user_data"):
+                        for item in os.listdir("user_data"):
+                            cache_dir = os.path.join("user_data", item, "Default", "Cache")
+                            if os.path.exists(cache_dir):
+                                shutil.rmtree(cache_dir, ignore_errors=True)
+                    
+                    for file in os.listdir("."):
+                        if file.startswith("debug_") and file.endswith(".png"):
+                            os.remove(file)
+                            
+                except Exception as e:
+                    log(f"Daily cleanup error: {e}")
+                finally:
+                    last_cleanup_time = time.time()
+
             # Check for background auto-responder tasks first
             check_auto_responder()
             
