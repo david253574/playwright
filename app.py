@@ -1428,11 +1428,37 @@ with tab2:
         elif delete_btn and edit_id:
             updated_profiles = [p for p in profiles_data if p["id"] != edit_id]
             save_profiles(updated_profiles)
+            
+            try:
+                if os.path.exists("communities_cache.json"):
+                    with open("communities_cache.json", "r") as f:
+                        cache = json.load(f)
+                    if edit_id in cache:
+                        del cache[edit_id]
+                        with open("communities_cache.json", "w") as f:
+                            json.dump(cache, f, indent=4)
+                import shutil
+                profile_dir = f"./user_data/{edit_id}"
+                if os.path.exists(profile_dir):
+                    shutil.rmtree(profile_dir, ignore_errors=True)
+            except Exception as e:
+                st.warning(f"Profile deleted, but cache cleanup failed: {e}")
+                
             st.warning(f"Profile {edit_id} deleted successfully.")
             time.sleep(random.uniform(0.8, 1.5))
             st.rerun()
         elif delete_all_btn:
             save_profiles([])
+            
+            try:
+                if os.path.exists("communities_cache.json"):
+                    os.remove("communities_cache.json")
+                import shutil
+                if os.path.exists("./user_data"):
+                    shutil.rmtree("./user_data", ignore_errors=True)
+            except Exception as e:
+                pass
+                
             st.error("All profiles have been permanently deleted.")
             time.sleep(random.uniform(0.8, 1.5))
             st.rerun()
