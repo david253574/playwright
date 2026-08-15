@@ -29,18 +29,24 @@ def process_auto_responder_bg(profile, universal_msg, check_priority=True, check
             return
             
         try:
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                executable_path="/usr/bin/google-chrome-stable",
-                headless=False,
-                args=[
+            launch_args = {
+                "user_data_dir": user_data_dir,
+                "executable_path": "/usr/bin/google-chrome-stable",
+                "headless": True,
+                "args": [
                     "--disable-blink-features=AutomationControlled",
                     "--disable-infobars",
                     "--disable-features=Translate",
                     "--disable-sync"
                 ]
-            )
+            }
+            if profile.get("proxy_url"):
+                launch_args["proxy"] = {"server": profile.get("proxy_url")}
+            context = p.chromium.launch_persistent_context(**launch_args)
+            if profile.get("auth_token"):
+                context.add_cookies([{"name": "auth_token", "value": profile.get("auth_token"), "domain": ".x.com", "path": "/"}])
             page = context.new_page()
+            Stealth().apply_stealth_sync(page)
             context.set_default_navigation_timeout(60000)
             
             # Scrape main inbox first to build a whitelist of already-accepted users
@@ -391,8 +397,8 @@ def check_auto_responder():
     except: return
     
     run_all = cfg.get("run_all", False)
-    sel_prof = cfg.get("selected_profile")
-    profiles_to_run = profiles if run_all else [p for p in profiles if p["id"] == sel_prof]
+    sel_profs = cfg.get("selected_profiles", [])
+    profiles_to_run = profiles if run_all else [p for p in profiles if p["id"] in sel_profs]
     
     import concurrent.futures
     failed = False

@@ -113,13 +113,18 @@ def fetch_joined_communities(profile):
             return communities
             
         try:
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                executable_path="/usr/bin/google-chrome-stable",
-                headless=False,
-                args=["--disable-blink-features=AutomationControlled", "--disable-infobars"],
-                ignore_default_args=["--enable-automation"]
-            )
+            launch_args = {
+                "user_data_dir": user_data_dir,
+                "executable_path": "/usr/bin/google-chrome-stable",
+                "headless": True,
+                "args": ["--disable-blink-features=AutomationControlled", "--disable-infobars", "--disable-features=Translate", "--disable-sync"],
+                "ignore_default_args": ["--enable-automation"]
+            }
+            if profile.get("proxy_url"):
+                launch_args["proxy"] = {"server": profile.get("proxy_url")}
+            context = p.chromium.launch_persistent_context(**launch_args)
+            if profile.get("auth_token"):
+                context.add_cookies([{"name": "auth_token", "value": profile.get("auth_token"), "domain": ".x.com", "path": "/"}])
             page = context.new_page()
             Stealth().apply_stealth_sync(page)
             
@@ -220,19 +225,18 @@ def fetch_joined_communities_manual(profile):
             return communities
             
         try:
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                executable_path="/usr/bin/google-chrome-stable",
-                headless=False,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-infobars",
-                    "--disable-features=Translate",
-                    "--disable-sync"
-                ],
-                viewport={"width": random.choice([1366, 1440, 1920, 1536]), "height": random.choice([768, 900, 1080, 864])},
-                ignore_default_args=["--enable-automation"]
-            )
+            launch_args = {
+                "user_data_dir": user_data_dir,
+                "executable_path": "/usr/bin/google-chrome-stable",
+                "headless": True,
+                "args": ["--disable-blink-features=AutomationControlled", "--disable-infobars", "--disable-features=Translate", "--disable-sync"],
+                "ignore_default_args": ["--enable-automation"]
+            }
+            if profile.get("proxy_url"):
+                launch_args["proxy"] = {"server": profile.get("proxy_url")}
+            context = p.chromium.launch_persistent_context(**launch_args)
+            if profile.get("auth_token"):
+                context.add_cookies([{"name": "auth_token", "value": profile.get("auth_token"), "domain": ".x.com", "path": "/"}])
             page = context.new_page()
             Stealth().apply_stealth_sync(page)
             
@@ -351,19 +355,18 @@ def process_profile(profile, user_tweet_text, uploaded_media_path=None, selected
             return
             
         try:
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                executable_path="/usr/bin/google-chrome-stable",
-                headless=False,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-infobars",
-                    "--disable-features=Translate",
-                    "--disable-sync"
-                ],
-                viewport={"width": random.choice([1366, 1440, 1920, 1536]), "height": random.choice([768, 900, 1080, 864])},
-                ignore_default_args=["--enable-automation"]
-            )
+            launch_args = {
+                "user_data_dir": user_data_dir,
+                "executable_path": "/usr/bin/google-chrome-stable",
+                "headless": True,
+                "args": ["--disable-blink-features=AutomationControlled", "--disable-infobars", "--disable-features=Translate", "--disable-sync"],
+                "ignore_default_args": ["--enable-automation"]
+            }
+            if profile.get("proxy_url"):
+                launch_args["proxy"] = {"server": profile.get("proxy_url")}
+            context = p.chromium.launch_persistent_context(**launch_args)
+            if profile.get("auth_token"):
+                context.add_cookies([{"name": "auth_token", "value": profile.get("auth_token"), "domain": ".x.com", "path": "/"}])
             page = context.new_page()
             Stealth().apply_stealth_sync(page)
             context.set_default_navigation_timeout(60000)
@@ -576,19 +579,18 @@ def process_auto_responder(profile, universal_msg, check_priority=True, check_hi
             return False
             
         try:
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                executable_path="/usr/bin/google-chrome-stable",
-                headless=False,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-infobars",
-                    "--disable-features=Translate",
-                    "--disable-sync"
-                ],
-                viewport={"width": random.choice([1366, 1440, 1920, 1536]), "height": random.choice([768, 900, 1080, 864])},
-                ignore_default_args=["--enable-automation"]
-            )
+            launch_args = {
+                "user_data_dir": user_data_dir,
+                "executable_path": "/usr/bin/google-chrome-stable",
+                "headless": True,
+                "args": ["--disable-blink-features=AutomationControlled", "--disable-infobars", "--disable-features=Translate", "--disable-sync"],
+                "ignore_default_args": ["--enable-automation"]
+            }
+            if profile.get("proxy_url"):
+                launch_args["proxy"] = {"server": profile.get("proxy_url")}
+            context = p.chromium.launch_persistent_context(**launch_args)
+            if profile.get("auth_token"):
+                context.add_cookies([{"name": "auth_token", "value": profile.get("auth_token"), "domain": ".x.com", "path": "/"}])
             page = context.new_page()
             Stealth().apply_stealth_sync(page)
             context.set_default_navigation_timeout(60000)
@@ -1125,8 +1127,18 @@ with tab1:
                         except Exception as e:
                             st.error(f"Invalid JSON format. Make sure it's a valid JSON object. Error: {e}")
 
+            st.divider()
+            st.subheader("Filter Accounts")
+            selected_publish_accounts = st.multiselect(
+                "Select accounts to display and post to (leave empty to show all):",
+                options=list(communities_cache.keys()),
+                default=[]
+            )
+
             uploaded_images = {}
             for p_id, profile_comms in communities_cache.items():
+                if selected_publish_accounts and p_id not in selected_publish_accounts:
+                    continue
                 st.markdown(f"### Account: {p_id}")
                 
                 if profile_comms and isinstance(list(profile_comms.values())[0], dict):
@@ -1399,18 +1411,16 @@ with tab2:
         if action == "Edit Existing Profile" and profiles_data:
             p_id = edit_id
             username = st.text_input("Username/Email Address Handle", value=target_prof.get("username", ""))
-            password = st.text_input("Direct Password Configuration", value=target_prof.get("password", ""), type="password")
-            user_data_dir = st.text_input("Storage Isolation Profile Path", value=target_prof.get("user_data_dir", f"./user_data/{p_id}"))
+            auth_token = st.text_input("X Auth Token (Cookie)", value=target_prof.get("auth_token", ""), type="password", help="Paste the 'auth_token' cookie from your browser.")
+            proxy_url = st.text_input("Residential Proxy URL (Optional)", value=target_prof.get("proxy_url", ""), help="e.g. http://user:pass@proxy:8000")
             
-            current_user_data_dir = user_data_dir
             current_p_id = p_id
         else:
             p_id = st.text_input("Create Unique Profile ID (e.g. tech_handle)")
             username = st.text_input("Username/Email Address Handle")
-            password = st.text_input("Direct Password Configuration", type="password")
-            user_data_dir = st.text_input("Storage Isolation Profile Path", value=f"./user_data/{p_id}" if p_id else "./user_data/")
+            auth_token = st.text_input("X Auth Token (Cookie)", type="password", help="Paste the 'auth_token' cookie from your browser.")
+            proxy_url = st.text_input("Residential Proxy URL (Optional)", help="e.g. http://user:pass@proxy:8000")
             
-            current_user_data_dir = user_data_dir
             current_p_id = p_id
             
         submit_save = st.form_submit_button("💾 Save Profile Configuration")
@@ -1418,14 +1428,15 @@ with tab2:
         delete_btn = st.form_submit_button("🗑️ Delete Selected Profile", type="primary")
         
         if submit_save:
-            if not p_id or not username or not password:
-                st.error("All credential attributes require active inputs before changes can be stored.")
+            if not p_id or not username or not auth_token:
+                st.error("Profile ID, Username, and Auth Token are required.")
             else:
                 new_entry = {
                     "id": p_id, 
                     "username": username, 
-                    "password": password, 
-                    "user_data_dir": user_data_dir
+                    "auth_token": auth_token, 
+                    "proxy_url": proxy_url,
+                    "user_data_dir": f"./user_data/{p_id}" # Keep for internal caching if needed
                 }
                 updated_profiles = [p for p in profiles_data if p["id"] != p_id]
                 updated_profiles.append(new_entry)
@@ -1440,24 +1451,6 @@ with tab2:
             time.sleep(random.uniform(0.8, 1.5))
             st.rerun()
 
-    st.divider()
-    st.subheader("Initial Setup (Sighted Helper Required)")
-    st.write("Run this once per account to manually verify the login session. A visible browser page will open.")
-
-    if user_data_dir: 
-        button_label = f" Open Visible Browser to Log In [{p_id}]" if p_id else " Open Visible Browser to Log In"
-        login_triggered = st.button(button_label)
-        
-        if login_triggered:
-            with st.spinner("Opening browser... Please log in, WAIT 5 SECONDS, then manually close the browser tab."):
-                success, message = setup_persistent_session(user_data_dir, "https://x.com")
-                if success:
-                    st.success(message)
-                else:
-                    st.error(message)
-    else:
-        st.info("Please enter a Storage Isolation Profile Path above to enable the login browser.")
-
 # TAB 3: AUTO-RESPONDER
 with tab3:
     st.header("💬 Automated Message Responder")
@@ -1470,7 +1463,7 @@ with tab3:
         
         profile_options = {p["id"]: p for p in profiles_data}
         if not run_all:
-            selected_responder_id = st.selectbox("Select Profile for Auto-Responder", options=list(profile_options.keys()), key="responder_profile_select")
+            selected_responder_ids = st.multiselect("Select Profiles for Auto-Responder", options=list(profile_options.keys()), key="responder_profile_select", default=list(profile_options.keys()))
         
         chat_password = st.text_input("Chat Unlock Password", value="2004", type="password", help="The password to unlock your chats when opening X messages for the first time.")
         universal_message = st.text_area("Universal Reply Message", value="Message received.", height=100)
@@ -1487,7 +1480,7 @@ with tab3:
             if not process_priority and not process_hidden:
                 st.warning("Please select at least one tab to check (Priority or Other).")
             else:
-                profiles_to_run = profiles_data if run_all else [profile_options[selected_responder_id]]
+                profiles_to_run = profiles_data if run_all else [profile_options[pid] for pid in selected_responder_ids]
                 
                 with st.spinner(f"Running auto-responder for {len(profiles_to_run)} profile(s)... This will open a visible browser."):
                     for prof in profiles_to_run:
@@ -1520,7 +1513,7 @@ with tab3:
                     "interval_minutes": check_interval,
                     "max_checks": max_checks,
                     "run_all": run_all,
-                    "selected_profile": selected_responder_id if not run_all else None,
+                    "selected_profiles": selected_responder_ids if not run_all else [],
                     "universal_msg": universal_message,
                     "check_priority": process_priority,
                     "check_hidden": process_hidden,

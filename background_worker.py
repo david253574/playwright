@@ -108,19 +108,18 @@ def process_profile(profile, user_tweet_text, uploaded_media_path=None, selected
             return False
             
         try:
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                executable_path="/usr/bin/google-chrome-stable",
-                headless=False,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-infobars",
-                    "--disable-features=Translate",
-                    "--disable-sync"
-                ],
-                viewport={"width": random.choice([1366, 1440, 1920, 1536]), "height": random.choice([768, 900, 1080, 864])},
-                ignore_default_args=["--enable-automation"]
-            )
+            launch_args = {
+                "user_data_dir": user_data_dir,
+                "executable_path": "/usr/bin/google-chrome-stable",
+                "headless": True,
+                "args": ["--disable-blink-features=AutomationControlled", "--disable-infobars", "--disable-features=Translate", "--disable-sync"],
+                "ignore_default_args": ["--enable-automation"]
+            }
+            if profile.get("proxy_url"):
+                launch_args["proxy"] = {"server": profile.get("proxy_url")}
+            context = p.chromium.launch_persistent_context(**launch_args)
+            if profile.get("auth_token"):
+                context.add_cookies([{"name": "auth_token", "value": profile.get("auth_token"), "domain": ".x.com", "path": "/"}])
             page = context.new_page()
             Stealth().apply_stealth_sync(page)
             context.set_default_navigation_timeout(60000)
