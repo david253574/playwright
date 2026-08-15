@@ -42,29 +42,6 @@ def is_session_locked(user_data_dir):
             return False
     return False
 
-def setup_persistent_session(user_data_path, target_login_url="https://x.com"):
-    """Launches a visible browser for initial login and waits for the user to close it."""
-    if is_session_locked(user_data_path):
-        return False, "Browser in use."
-        
-    try:
-        # Launch real Chrome without Playwright so Google/Twitter don't block 2FA phone prompts
-        process = subprocess.Popen([
-            "/usr/bin/google-chrome-stable",
-            f"--user-data-dir={user_data_path}",
-            "--disable-sync",
-            "--no-first-run",
-            "--new-window",
-            target_login_url
-        ])
-        
-        # Wait for the user to close the browser
-        process.wait()
-        
-        return True, "Session saved successfully!"
-    except Exception as e:
-        st.error("The browser could not be opened. Please verify that the browser is not already running.")
-        return False, f"Setup failed: {str(e)}"
 
 def can_post_to_community(p_id, comm_url, max_daily_posts):
     if max_daily_posts <= 0: return True
