@@ -1402,7 +1402,11 @@ with tab2:
             
         submit_save = st.form_submit_button("💾 Save Profile Configuration")
         # Add inside the form, below the submit button
-        delete_btn = st.form_submit_button("🗑️ Delete Selected Profile", type="primary")
+        col1, col2 = st.columns(2)
+        with col1:
+            delete_btn = st.form_submit_button("🗑️ Delete Selected Profile")
+        with col2:
+            delete_all_btn = st.form_submit_button("⚠️ Delete ALL Profiles", type="primary")
         
         if submit_save:
             if not p_id or not username or not auth_token:
@@ -1425,6 +1429,11 @@ with tab2:
             updated_profiles = [p for p in profiles_data if p["id"] != edit_id]
             save_profiles(updated_profiles)
             st.warning(f"Profile {edit_id} deleted successfully.")
+            time.sleep(random.uniform(0.8, 1.5))
+            st.rerun()
+        elif delete_all_btn:
+            save_profiles([])
+            st.error("All profiles have been permanently deleted.")
             time.sleep(random.uniform(0.8, 1.5))
             st.rerun()
 
