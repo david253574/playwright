@@ -1153,7 +1153,6 @@ with tab1:
                 
                 uploaded_images[p_id] = st.file_uploader(
                     f"Upload Image for {p_id} (Optional)", 
-                    type=["jpg", "jpeg", "png"], 
                     key=f"img_{p_id}"
                 )
                 st.divider()
@@ -1164,7 +1163,7 @@ with tab1:
             st.divider()
             st.subheader("Bulk Image Upload (Optional)")
             st.write("Upload multiple images here. Accounts that don't have a specific image assigned will randomly receive one of these images!")
-            bulk_images = st.file_uploader("Upload Bulk Images", type=["jpg", "jpeg", "png"], accept_multiple_files=True, key="bulk_images_uploader")
+            bulk_images = st.file_uploader("Upload Bulk Images", accept_multiple_files=True, key="bulk_images_uploader")
             
             if "bulk_image_assignments" not in st.session_state:
                 st.session_state.bulk_image_assignments = {}
